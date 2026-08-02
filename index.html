@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Prompt Save ♡</title>
+
+<!-- Tailwind CSS (CDN) -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Import map: React + ReactDOM + lucide-react served as ESM so we can just <script type="module"> -->
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.263.1?external=react"
+  }
+}
+</script>
+
+<!-- Babel standalone, so we can write JSX directly in the browser -->
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<style>
+  body {
+    margin: 0;
+    background-color: #ffe1ec;
+    background-image: radial-gradient(circle, rgba(0,0,0,0.06) 1.4px, transparent 1.4px);
+    background-size: 18px 18px;
+  }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script type="text/babel" data-type="module" data-presets="react">
+import React, { useState, useRef } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  Heart,
+  Search,
+  Copy,
+  Check,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Sparkles,
+  Upload,
+  Image as ImageIcon,
+  Trash2,
+  LogIn,
+  LogOut,
+  Lock,
+  AlertCircle,
+} from "lucide-react";
+
+const ADMIN_PASSWORD = "prompt1234";
+
+const CATEGORIES = ["1인", "2인", "ETC", "clouth(女)", "clouth(男)"];
+
+let fieldIdCounter = 100;
+const makeFieldId = () => {
+  fieldIdCounter += 1;
+  return fieldIdCounter;
+};
+
+const INITIAL_PROMPTS = [
+  {
+    id: 1,
+    category: "1인",
+    image:
+      "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&q=80",
+    fields: [
+      {
+        id: makeFieldId(),
+        label: "Positive",
+        text: "masterpiece, best quality, 1girl, solo, pastel pink hair, ribbon, standing pose, soft lighting, y2k aesthetic, glossy lips, sparkle background, detailed eyes",
+      },
+      {
+        id: makeFieldId(),
+        label: "Negative",
+        text: "lowres, bad anatomy, extra limbs, blurry, worst quality, watermark",
+      },
+    ],
+  },
+  {
+    id: 2,
+    category: "2인",
+    image:
+      "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=600&q=80",
+    fields: [
+      {
+        id: makeFieldId(),
+        label: "Positive",
+        text: "masterpiece, best quality, 2girls, duo pose, matching outfits, holding hands, cute smile, cherry blossom background, soft pastel tones",
+      },
+    ],
+  },
+  {
+    id: 3,
+    category: "clouth(女)",
+    image:
+      "https://images.unsplash.com/photo-1490114538077-0a7f8cb49891?w=600&q=80",
+    fields: [
+      {
+        id: makeFieldId(),
+        label: "Outfit",
+        text: "detailed clothing, pink schoolgirl uniform, pleated skirt, knee socks, ribbon tie, glossy fabric texture, y2k fashion, accessories, layered outfit",
+      },
+    ],
+  },
+  {
+    id: 4,
+    category: "ETC",
+    image:
+      "https://images.unsplash.com/photo-1490750967868-88aa4486c946?w=600&q=80",
+    fields: [
+      {
+        id: makeFieldId(),
+        label: "Background",
+        text: "background only, pastel gradient sky, stars, hearts, glitter particles, retro grid floor, chrome text, y2k poster style, no character",
+      },
+    ],
+  },
+];
+
+const emptyField = () => ({ id: makeFieldId(), label: "", text: "" });
+
+function PromptSave() {
+  const [prompts, setPrompts] = useState(INITIAL_PROMPTS);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [toastMessage, setToastMessage] = useState("");
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState(CATEGORIES[0]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [copiedKey, setCopiedKey] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [newImage, setNewImage] = useState("");
+  const [newImageName, setNewImageName] = useState("");
+  const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
+  const [newMainText, setNewMainText] = useState("");
+  const [extraFields, setExtraFields] = useState([]);
+  const cardRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setNewImageName(file.name);
+    const objectUrl = URL.createObjectURL(file);
+    setNewImage(objectUrl);
+  };
+
+  const filtered = prompts.filter((p) => {
+    const matchesSearch =
+      search.trim() === "" ||
+      p.fields.some((f) =>
+        f.text.toLowerCase().includes(search.toLowerCase())
+      ) ||
+      p.category.toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = p.category === activeCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const safeIndex =
+    filtered.length === 0 ? 0 : Math.min(currentIndex, filtered.length - 1);
+  const current = filtered[safeIndex];
+
+  const goPrev = () => {
+    setCurrentIndex((i) => (i - 1 + filtered.length) % filtered.length);
+  };
+  const goNext = () => {
+    setCurrentIndex((i) => (i + 1) % filtered.length);
+  };
+
+  const handleCopy = async (text, key) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 1500);
+  };
+
+  const showToast = (message) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(""), 2200);
+  };
+
+  const openLoginModal = () => {
+    setPasswordInput("");
+    setLoginError("");
+    setShowLoginModal(true);
+  };
+
+  const handleLoginSubmit = () => {
+    if (passwordInput === ADMIN_PASSWORD) {
+      setIsAdmin(true);
+      setShowLoginModal(false);
+      setPasswordInput("");
+      setLoginError("");
+      showToast("Successfully logged in as Admin! ✨");
+    } else {
+      setLoginError("Incorrect password. Please try again.");
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAdmin(false);
+    showToast("Logged out ♡");
+  };
+
+  const handleAddExtraField = () => {
+    setExtraFields((prev) => [...prev, emptyField()]);
+  };
+
+  const handleRemoveExtraField = (id) => {
+    setExtraFields((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  const handleExtraFieldChange = (id, key, value) => {
+    setExtraFields((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, [key]: value } : f))
+    );
+  };
+
+  const handleAddPrompt = () => {
+    if (!newMainText.trim()) return;
+    const nextId =
+      prompts.length > 0 ? Math.max(...prompts.map((p) => p.id)) + 1 : 1;
+    const fields = [
+      { id: makeFieldId(), label: "Prompt", text: newMainText.trim() },
+      ...extraFields
+        .filter((f) => f.text.trim())
+        .map((f) => ({
+          id: f.id,
+          label: f.label.trim() || "Prompt",
+          text: f.text.trim(),
+        })),
+    ];
+    const newPrompt = {
+      id: nextId,
+      category: newCategory,
+      image:
+        newImage ||
+        "https://images.unsplash.com/photo-1520975954732-35dd22299614?w=600&q=80",
+      fields,
+    };
+    setPrompts((prev) => [...prev, newPrompt]);
+    setNewImage("");
+    setNewImageName("");
+    setNewMainText("");
+    setExtraFields([]);
+    setNewCategory(CATEGORIES[0]);
+    setShowModal(false);
+    setCurrentIndex(filtered.length);
+  };
+
+  const badgeNumber = current ? String(current.id).padStart(3, "0") : "000";
+
+  return (
+    <div className="min-h-screen w-full relative">
+      <div className="max-w-2xl mx-auto px-5 pt-8 pb-28 relative">
+        {/* Admin login/logout toggle */}
+        <button
+          onClick={isAdmin ? handleLogout : openLoginModal}
+          className={`absolute top-8 right-5 flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 border-black text-xs font-bold shadow-[2px_2px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all ${
+            isAdmin ? "bg-black text-white" : "bg-white text-black"
+          }`}
+        >
+          {isAdmin ? (
+            <>
+              <LogOut className="w-3.5 h-3.5" /> Admin Logout
+            </>
+          ) : (
+            <>
+              <LogIn className="w-3.5 h-3.5" /> Admin Login
+            </>
+          )}
+        </button>
+
+        {/* Taped ribbon banner */}
+        <div className="flex justify-center mb-4">
+          <div
+            className="relative px-8 py-2 border-2 border-black shadow-[3px_3px_0px_#000] rotate-[-2deg]"
+            style={{ backgroundColor: "#f7a8c4" }}
+          >
+            <span
+              className="text-black text-lg tracking-wide"
+              style={{ fontFamily: "'Brush Script MT', cursive" }}
+            >
+              ♡ nai prompt save ♡
+            </span>
+            <div className="absolute -top-2 -left-3 w-8 h-4 bg-white/60 border border-black/20 rotate-[-15deg]" />
+            <div className="absolute -top-2 -right-3 w-8 h-4 bg-white/60 border border-black/20 rotate-[15deg]" />
+          </div>
+        </div>
+
+        {/* Headline */}
+        <div className="flex items-center justify-center gap-3 mb-1">
+          <Heart className="w-8 h-8 text-[#e0648f] fill-[#e0648f]" />
+          <h1 className="text-4xl font-extrabold text-black tracking-tight">
+            Prompt Save
+          </h1>
+          <Heart className="w-8 h-8 text-[#e0648f] fill-[#e0648f]" />
+        </div>
+        <p
+          className="text-center text-gray-500 mb-6"
+          style={{ fontFamily: "'Georgia', serif", fontStyle: "italic" }}
+        >
+          ✦ edit freely · no redistribution please ✦
+        </p>
+
+        {/* Search bar */}
+        <div className="relative mb-4">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-black" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentIndex(0);
+            }}
+            placeholder="search prompts by title or tag..."
+            className="w-full pl-12 pr-5 py-3 rounded-full border-2 border-black shadow-[4px_4px_0px_#000] bg-white outline-none focus:translate-x-[1px] focus:translate-y-[1px] focus:shadow-[3px_3px_0px_#000] transition-all placeholder:text-gray-400 text-sm"
+          />
+        </div>
+
+        {/* Category buttons */}
+        <div className="flex flex-wrap gap-2 justify-center mb-6">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => {
+                setActiveCategory(cat);
+                setCurrentIndex(0);
+              }}
+              className={`px-4 py-1.5 rounded-full border-2 border-black text-sm font-bold shadow-[2px_2px_0px_#000] transition-all active:translate-x-[1px] active:translate-y-[1px] active:shadow-none ${
+                activeCategory === cat
+                  ? "bg-black text-white"
+                  : "bg-white text-black"
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Pagination controls */}
+        <div className="flex items-center justify-center gap-4 mb-4">
+          <button
+            onClick={goPrev}
+            disabled={filtered.length === 0}
+            className="w-9 h-9 flex items-center justify-center rounded-full border-2 border-black bg-white shadow-[2px_2px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none disabled:opacity-30"
+          >
+            <ChevronLeft className="w-5 h-5 text-black" />
+          </button>
+          <span className="font-bold text-black text-sm min-w-[70px] text-center">
+            {filtered.length === 0
+              ? "0 of 0"
+              : `${safeIndex + 1} of ${filtered.length}`}
+          </span>
+          <button
+            onClick={goNext}
+            disabled={filtered.length === 0}
+            className="w-9 h-9 flex items-center justify-center rounded-full border-2 border-black bg-white shadow-[2px_2px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none disabled:opacity-30"
+          >
+            <ChevronRight className="w-5 h-5 text-black" />
+          </button>
+        </div>
+
+        {/* Add new prompt button (admin only) */}
+        {isAdmin && (
+          <div className="flex justify-center mb-8">
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-2 px-5 py-2 rounded-full border-2 border-black bg-white font-bold text-sm shadow-[3px_3px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+            >
+              <Plus className="w-4 h-4" /> Add New Prompt
+            </button>
+          </div>
+        )}
+
+        {/* Card */}
+        {current ? (
+          <div
+            ref={cardRef}
+            className="bg-white border-2 border-black shadow-[6px_6px_0px_#000] rounded-2xl overflow-hidden"
+          >
+            {/* Image slot */}
+            <div className="relative w-full h-72 bg-gray-100 border-b-2 border-black overflow-hidden">
+              <img
+                src={current.image}
+                alt="prompt preview"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+              <span className="absolute top-2 left-2 bg-black text-white text-xs font-bold px-2 py-1 rounded-md border-2 border-black">
+                #{badgeNumber}
+              </span>
+              <span
+                className="absolute top-2 right-2 text-black text-xs font-bold px-2 py-1 rounded-md border-2 border-black shadow-[2px_2px_0px_#000]"
+                style={{ backgroundColor: "#f7a8c4" }}
+              >
+                {current.category}
+              </span>
+            </div>
+
+            {/* Multiple prompt sections */}
+            <div className="p-4 space-y-4">
+              {current.fields.map((field) => {
+                const key = `${current.id}-${field.id}`;
+                return (
+                  <div key={field.id}>
+                    <p className="text-xs font-bold text-[#e0648f] mb-1 tracking-wide">
+                      [ {field.label} Prompt ]
+                    </p>
+                    <div
+                      className="h-28 overflow-y-auto bg-[#fdfaf5] border-2 border-black rounded-lg p-3 text-[13px] leading-relaxed text-black"
+                      style={{ fontFamily: "'Courier New', monospace" }}
+                    >
+                      {field.text}
+                    </div>
+                    <button
+                      onClick={() => handleCopy(field.text, key)}
+                      className="mt-2 w-full flex items-center justify-center gap-2 bg-black text-white font-bold py-2 rounded-lg border-2 border-black shadow-[3px_3px_0px_#e0648f] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all text-sm"
+                    >
+                      {copiedKey === key ? (
+                        <>
+                          <Check className="w-4 h-4" /> COPIED! ✨
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" /> COPY
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white border-2 border-black shadow-[6px_6px_0px_#000] rounded-2xl p-10 text-center text-gray-400 font-bold">
+            no prompts found ♡
+          </div>
+        )}
+      </div>
+
+      {/* Floating action button (admin only) */}
+      {isAdmin && (
+        <button
+          onClick={() => setShowModal(true)}
+          className="fixed bottom-6 right-6 w-14 h-14 rounded-full border-2 border-black shadow-[4px_4px_0px_#000] flex items-center justify-center active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+          style={{ backgroundColor: "#e0648f" }}
+          aria-label="Add new prompt"
+        >
+          <Plus className="w-7 h-7 text-white" />
+        </button>
+      )}
+
+      {/* Add prompt modal (admin only) */}
+      {showModal && isAdmin && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white border-2 border-black shadow-[6px_6px_0px_#000] rounded-2xl w-full max-w-sm p-5 relative my-8">
+            <button
+              onClick={() => setShowModal(false)}
+              className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full border-2 border-black bg-white active:translate-x-[1px] active:translate-y-[1px]"
+            >
+              <X className="w-4 h-4 text-black" />
+            </button>
+            <h2 className="text-lg font-extrabold text-black mb-4 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-[#e0648f]" /> Add New Prompt
+            </h2>
+
+            <label className="block text-xs font-bold text-black mb-1">
+              Upload Image
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() =>
+                fileInputRef.current && fileInputRef.current.click()
+              }
+              className="w-full mb-3 flex items-center gap-3 px-3 py-2 border-2 border-black rounded-lg bg-white shadow-[2px_2px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all"
+            >
+              {newImage ? (
+                <img
+                  src={newImage}
+                  alt="preview thumbnail"
+                  className="w-10 h-10 object-cover rounded-md border-2 border-black flex-shrink-0"
+                />
+              ) : (
+                <span className="w-10 h-10 flex items-center justify-center rounded-md border-2 border-dashed border-black flex-shrink-0">
+                  <ImageIcon className="w-4 h-4 text-black" />
+                </span>
+              )}
+              <span className="flex items-center gap-1.5 text-sm font-bold text-black truncate">
+                <Upload className="w-4 h-4 flex-shrink-0" />
+                {newImageName ? newImageName : "Choose File"}
+              </span>
+            </button>
+
+            <label className="block text-xs font-bold text-black mb-1">
+              Category
+            </label>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setNewCategory(cat)}
+                  className={`px-3 py-1 rounded-full border-2 border-black text-xs font-bold ${
+                    newCategory === cat
+                      ? "bg-black text-white"
+                      : "bg-white text-black"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            <label className="block text-xs font-bold text-black mb-1">
+              Prompt Text
+            </label>
+            <textarea
+              value={newMainText}
+              onChange={(e) => setNewMainText(e.target.value)}
+              placeholder="masterpiece, best quality, ..."
+              rows={4}
+              className="w-full mb-3 px-3 py-2 border-2 border-black rounded-lg text-sm outline-none resize-none"
+              style={{ fontFamily: "'Courier New', monospace" }}
+            />
+
+            {/* Dynamic extra fields */}
+            {extraFields.length > 0 && (
+              <div className="space-y-3 mb-3">
+                {extraFields.map((field) => (
+                  <div
+                    key={field.id}
+                    className="border-2 border-dashed border-black rounded-lg p-3 bg-[#fff7fa]"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={field.label}
+                        onChange={(e) =>
+                          handleExtraFieldChange(
+                            field.id,
+                            "label",
+                            e.target.value
+                          )
+                        }
+                        placeholder="Label (e.g. Negative, Outfit)"
+                        className="flex-1 px-2 py-1.5 border-2 border-black rounded-md text-xs font-bold outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveExtraField(field.id)}
+                        className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-md border-2 border-black bg-white active:translate-x-[1px] active:translate-y-[1px]"
+                        aria-label="Remove field"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-black" />
+                      </button>
+                    </div>
+                    <textarea
+                      value={field.text}
+                      onChange={(e) =>
+                        handleExtraFieldChange(
+                          field.id,
+                          "text",
+                          e.target.value
+                        )
+                      }
+                      placeholder="prompt text..."
+                      rows={3}
+                      className="w-full px-2 py-1.5 border-2 border-black rounded-md text-sm outline-none resize-none"
+                      style={{ fontFamily: "'Courier New', monospace" }}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleAddExtraField}
+              className="w-full mb-4 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border-2 border-black bg-white font-bold text-xs shadow-[2px_2px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add Extra Prompt
+            </button>
+
+            <button
+              onClick={handleAddPrompt}
+              className="w-full bg-black text-white font-bold py-2.5 rounded-lg border-2 border-black shadow-[3px_3px_0px_#e0648f] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+            >
+              Save Prompt ♡
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Admin password login modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white border-2 border-black shadow-[6px_6px_0px_#000] rounded-2xl w-full max-w-xs p-5 relative">
+            <button
+              onClick={() => setShowLoginModal(false)}
+              className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full border-2 border-black bg-white active:translate-x-[1px] active:translate-y-[1px]"
+            >
+              <X className="w-4 h-4 text-black" />
+            </button>
+
+            <div className="flex justify-center mb-3">
+              <div
+                className="w-12 h-12 rounded-full border-2 border-black flex items-center justify-center shadow-[2px_2px_0px_#000]"
+                style={{ backgroundColor: "#f7a8c4" }}
+              >
+                <Lock className="w-5 h-5 text-black" />
+              </div>
+            </div>
+
+            <h2 className="text-lg font-extrabold text-black mb-1 text-center">
+              Admin Login
+            </h2>
+            <p className="text-xs text-gray-500 text-center mb-4">
+              enter the admin password to continue ♡
+            </p>
+
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => {
+                setPasswordInput(e.target.value);
+                if (loginError) setLoginError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleLoginSubmit();
+              }}
+              placeholder="Enter admin password..."
+              className="w-full mb-2 px-3 py-2 border-2 border-black rounded-lg text-sm outline-none"
+              autoFocus
+            />
+
+            {loginError && (
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#c62864] mb-3">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                {loginError}
+              </div>
+            )}
+
+            <button
+              onClick={handleLoginSubmit}
+              className={`w-full bg-black text-white font-bold py-2.5 rounded-lg border-2 border-black shadow-[3px_3px_0px_#e0648f] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none ${
+                loginError ? "mt-0" : "mt-1"
+              }`}
+            >
+              Login
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Toast notification */}
+      {toastMessage && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[60]">
+          <div
+            className="flex items-center gap-2 px-4 py-2.5 rounded-full border-2 border-black shadow-[3px_3px_0px_#000] font-bold text-sm text-black"
+            style={{ backgroundColor: "#f7a8c4" }}
+          >
+            {toastMessage}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const root = createRoot(document.getElementById("root"));
+root.render(<PromptSave />);
+</script>
+
+</body>
+</html>
